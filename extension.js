@@ -33,41 +33,46 @@ import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 import * as Util from 'resource:///org/gnome/shell/misc/util.js';
 import {Extension, gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
 
+
 /* RegExp to tell what's an update */
 /* I am very loose on this, may make it easier to port to other distros */
 const RE_UpdateLine = /^(.+)\s+(\S+)\s+->\s+(.+)$/;
 
 /* Options */
-let ALWAYS_VISIBLE = true;
-let USE_BUILDIN_ICONS = true;
-let SHOW_COUNT = true;
-let BOOT_WAIT = 15;      // 15s
-let CHECK_INTERVAL = 60 * 60;   // 1h
-let NOTIFY = false;
-let HOWMUCH = 0;
-let TRANSIENT = true;
-let UPDATE_CMD = 'gnome-terminal -- sh -c "yay ; echo Done - Press enter to exit; read" ';
-let CHECK_CMD = "/bin/sh -c \"(/usr/bin/checkupdates; /usr/bin/yay -Qu --color never | sed 's/Get .*//') | sort -u -t' ' -k1,1\"";
-let MANAGER_CMD = '';
-let PACMAN_DIR = '/var/lib/pacman/local';
-let STRIP_VERSIONS = false;
-let STRIP_VERSIONS_N = true;
-let AUTO_EXPAND_LIST = 0;
-let DISABLE_PARSING = false;
-let PACKAGE_INFO_CMD = 'xdg-open https://www.archlinux.org/packages/%2$s/%3$s/%1$s';
+let ALWAYS_VISIBLE     = true;
+let USE_BUILDIN_ICONS  = true;
+let SHOW_COUNT         = true;
+let BOOT_WAIT          = 15;      // 15s
+let CHECK_INTERVAL     = 60*60;   // 1h
+let NOTIFY             = false;
+let HOWMUCH            = 0;
+let TRANSIENT          = true;
+let UPDATE_CMD         = "gnome-terminal -- /bin/sh -c \"sudo pacman -Syu ; echo Done - Press enter to exit; read _\" ";
+let CHECK_CMD          = "/usr/bin/checkupdates";
+let MANAGER_CMD        = "";
+let PACMAN_DIR         = "/var/lib/pacman/local";
+let STRIP_VERSIONS     = false;
+let STRIP_VERSIONS_N   = true;
+let AUTO_EXPAND_LIST   = 0;
+let DISABLE_PARSING    = false;
+let PACKAGE_INFO_CMD   = "xdg-open https://www.archlinux.org/packages/%2$s/%3$s/%1$s";
 
 /* Variables we want to keep when extension is disabled (eg during screen lock) */
-let FIRST_BOOT = 1;
-let UPDATES_PENDING = -1;
-let UPDATES_LIST = [];
+let FIRST_BOOT         = 1;
+let UPDATES_PENDING    = -1;
+let UPDATES_LIST       = [];
 
 /* A process builder without i10n for reproducible processing. */
 const launcher = new Gio.SubprocessLauncher({
-    flags: Gio.SubprocessFlags.STDOUT_PIPE |
-        Gio.SubprocessFlags.STDERR_PIPE,
+    flags: (Gio.SubprocessFlags.STDOUT_PIPE |
+        Gio.SubprocessFlags.STDERR_PIPE)
 });
-launcher.setenv('LANG', 'C', true);
+launcher.setenv("LANG", "C", true);
 
+function init() {
+    //String.prototype.format = Format.format;
+    //ExtensionUtils.initTranslations("arch-update");
+}
 
 export default class ArchUpdateIndicatorExtension extends Extension {
     constructor(metadata) {
@@ -82,19 +87,19 @@ export default class ArchUpdateIndicatorExtension extends Extension {
                 _updateProcess_pid: null,
                 _updateList: [],
             },
-            class ArchUpdateIndicator extends Button {
+            class ArchUpdateIndicator extends PanelMenu.Button {
                 _init() {
                     super._init(0);
                     this.updateIcon = new St.Icon({
                         gicon: this._getCustIcon('arch-unknown-symbolic'),
-                        style_class: 'system-status-icon',
+                        style_class: 'system-status-icon'
                     });
 
                     let box = new St.BoxLayout({vertical: false, style_class: 'panel-status-menu-box'});
                     this.label = new St.Label({
                         text: '',
                         y_expand: true,
-                        y_align: Clutter.ActorAlign.CENTER,
+                        y_align: Clutter.ActorAlign.CENTER
                     });
 
                     box.add_child(this.updateIcon);
@@ -113,11 +118,11 @@ export default class ArchUpdateIndicatorExtension extends Extension {
 
                     // A special "Checking" menu item with a stop button
                     this.checkingMenuItem = new PopupMenu.PopupBaseMenuItem({reactive: false});
-                    let checkingLabel = new St.Label({text: `${_('Checking')} …`});
+                    let checkingLabel = new St.Label({text: _('Checking') + " …"});
                     let cancelButton = new St.Button({
                         child: new St.Icon({icon_name: 'process-stop-symbolic'}),
                         style_class: 'system-menu-action arch-updates-menubutton',
-                        x_expand: true,
+                        x_expand: true
                     });
                     cancelButton.set_x_align(Clutter.ActorAlign.END);
                     this.checkingMenuItem.actor.add_actor(checkingLabel);
@@ -153,7 +158,7 @@ export default class ArchUpdateIndicatorExtension extends Extension {
                     this._updateList = UPDATES_LIST;
 
                     // Load settings
-                    this._settings = archUpdateIndicatorExtension.getSettings();
+                    this._settings = ExtensionUtils.getSettings('org.gnome.shell.extensions.arch-update');
                     this._settings.connect('changed', this._positionChanged.bind(this));
                     this._settingsChangedId = this._settings.connect('changed', this._applySettings.bind(this));
                     this._applySettings();
@@ -172,6 +177,7 @@ export default class ArchUpdateIndicatorExtension extends Extension {
                             return false; // Run once
                         });
                     }
+
                 }
 
                 _getCustIcon(icon_name) {
@@ -184,11 +190,12 @@ export default class ArchUpdateIndicatorExtension extends Extension {
                         let theme = new Gtk.IconTheme();
                         theme.set_theme_name(St.Settings.get().gtk_icon_theme);
 
-                        if (theme.has_icon(icon_name))
+                        if (theme.has_icon(icon_name)) {
                             return Gio.icon_new_for_string(icon_name);
+                        }
                     }
                     // Icon not available in theme, or user prefers built in icon
-                    return Gio.icon_new_for_string(`${archUpdateIndicatorExtension.dir.get_child('icons').get_path()}/${icon_name}.svg`);
+                    return Gio.icon_new_for_string(this.dir.get_child('icons').get_path() + "/" + icon_name + ".svg");
                 }
 
                 _positionChanged() {
@@ -197,7 +204,7 @@ export default class ArchUpdateIndicatorExtension extends Extension {
                         let boxes = {
                             0: Main.panel._leftBox,
                             1: Main.panel._centerBox,
-                            2: Main.panel._rightBox,
+                            2: Main.panel._rightBox
                         };
                         let p = this._settings.get_int('position');
                         let i = this._settings.get_int('position-number');
@@ -206,7 +213,7 @@ export default class ArchUpdateIndicatorExtension extends Extension {
                 }
 
                 _openSettings() {
-                    archUpdateIndicatorExtension.openPrefs();
+                    ExtensionUtils.openPrefs();
                 }
 
                 _openManager() {
@@ -234,13 +241,12 @@ export default class ArchUpdateIndicatorExtension extends Extension {
                     STRIP_VERSIONS = this._settings.get_boolean('strip-versions');
                     STRIP_VERSIONS_N = this._settings.get_boolean('strip-versions-in-notification');
                     AUTO_EXPAND_LIST = this._settings.get_int('auto-expand-list');
-                    // PACKAGE_INFO_CMD = this._settings.get_string('package-info-cmd');
-                    this.managerMenuItem.actor.visible = MANAGER_CMD != '';
+                    PACKAGE_INFO_CMD = this._settings.get_string('package-info-cmd');
+                    this.managerMenuItem.actor.visible = (MANAGER_CMD != "");
                     this._checkShowHide();
                     this._updateStatus();
                     let that = this;
-                    if (this._TimeoutId)
-                        GLib.source_remove(this._TimeoutId);
+                    if (this._TimeoutId) GLib.source_remove(this._TimeoutId);
                     this._TimeoutId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, CHECK_INTERVAL, function () {
                         that._checkUpdates();
                         return true;
@@ -254,7 +260,7 @@ export default class ArchUpdateIndicatorExtension extends Extension {
                         this._notifSource.destroy();
                         this._notifSource = null;
                     }
-
+                    ;
                     if (this.monitor) {
                         // Stop spying on pacman local dir
                         this.monitor.cancel();
@@ -299,10 +305,11 @@ export default class ArchUpdateIndicatorExtension extends Extension {
                 }
 
                 _checkAutoExpandList() {
-                    if (this.menu.isOpen && UPDATES_PENDING > 0 && UPDATES_PENDING <= AUTO_EXPAND_LIST)
+                    if (this.menu.isOpen && UPDATES_PENDING > 0 && UPDATES_PENDING <= AUTO_EXPAND_LIST) {
                         this.menuExpander.setSubmenuShown(true);
-                    else
+                    } else {
                         this.menuExpander.setSubmenuShown(false);
+                    }
                 }
 
                 _startFolderMonitor() {
@@ -316,8 +323,7 @@ export default class ArchUpdateIndicatorExtension extends Extension {
                 _onFolderChanged() {
                     // Folder have changed ! Let's schedule a check in a few seconds
                     let that = this;
-                    if (this._FirstTimeoutId)
-                        GLib.source_remove(this._FirstTimeoutId);
+                    if (this._FirstTimeoutId) GLib.source_remove(this._FirstTimeoutId);
                     this._FirstTimeoutId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 5, function () {
                         that._checkUpdates();
                         that._FirstTimeoutId = null;
@@ -330,10 +336,12 @@ export default class ArchUpdateIndicatorExtension extends Extension {
                         this.updateIcon.set_gicon(this._getCustIcon('arch-unknown-symbolic'));
                         this.checkNowMenuContainer.actor.visible = false;
                         this.checkingMenuItem.actor.visible = true;
+                        ;
                     } else {
                         this.checkNowMenuContainer.actor.visible = true;
-
+                        ;
                         this.checkingMenuItem.actor.visible = false;
+                        ;
                     }
                 }
 
@@ -342,7 +350,7 @@ export default class ArchUpdateIndicatorExtension extends Extension {
                     if (updatesCount > 0) {
                         // Updates pending
                         this.updateIcon.set_gicon(this._getCustIcon('arch-updates-symbolic'));
-                        this._updateMenuExpander(true, Gettext.ngettext('%d update pending', '%d updates pending', updatesCount).format(updatesCount));
+                        this._updateMenuExpander(true, Gettext.ngettext("%d update pending", "%d updates pending", updatesCount).format(updatesCount));
                         this.label.set_text(updatesCount.toString());
                         if (NOTIFY && UPDATES_PENDING < updatesCount) {
                             if (HOWMUCH > 0) {
@@ -352,34 +360,34 @@ export default class ArchUpdateIndicatorExtension extends Extension {
                                 } else {
                                     // Keep only packets that was not in the previous notification
                                     updateList = this._updateList.filter(function (pkg) {
-                                        return UPDATES_LIST.indexOf(pkg) < 0;
+                                        return UPDATES_LIST.indexOf(pkg) < 0
                                     });
                                 }
                                 // Filter out titles and whatnot
                                 if (!DISABLE_PARSING) {
                                     updateList = updateList.filter(function (line) {
-                                        return RE_UpdateLine.test(line);
+                                        return RE_UpdateLine.test(line)
                                     });
                                 }
                                 // If version numbers should be stripped, do it
                                 if (STRIP_VERSIONS_N == true) {
                                     updateList = updateList.map(function (p) {
                                         // Try to keep only what's before the first space
-                                        var chunks = p.split(' ', 2);
+                                        var chunks = p.split(" ", 2);
                                         return chunks[0];
                                     });
                                 }
                                 if (updateList.length > 0) {
                                     // Show notification only if there's new updates
                                     this._showNotification(
-                                        Gettext.ngettext('New Arch Linux Update', 'New Arch Linux Updates', updateList.length),
+                                        Gettext.ngettext("New Arch Linux Update", "New Arch Linux Updates", updateList.length),
                                         updateList.join(', ')
                                     );
                                 }
                             } else {
                                 this._showNotification(
-                                    Gettext.ngettext('New Arch Linux Update', 'New Arch Linux Updates', updatesCount),
-                                    Gettext.ngettext('There is %d update pending', 'There are %d updates pending', updatesCount).format(updatesCount)
+                                    Gettext.ngettext("New Arch Linux Update", "New Arch Linux Updates", updatesCount),
+                                    Gettext.ngettext("There is %d update pending", "There are %d updates pending", updatesCount).format(updatesCount)
                                 );
                             }
                         }
@@ -394,11 +402,11 @@ export default class ArchUpdateIndicatorExtension extends Extension {
                         } else if (updatesCount == -2) {
                             // Error
                             this.updateIcon.set_gicon(this._getCustIcon('arch-error-symbolic'));
-                            if (this.lastUnknowErrorString.indexOf('/usr/bin/checkupdates') > 0) {
+                            if (this.lastUnknowErrorString.indexOf("/usr/bin/checkupdates") > 0) {
                                 // We do a special change here due to checkupdates moved to pacman-contrib
                                 this._updateMenuExpander(false, _("Note : you have to install pacman-contrib to use the 'checkupdates' script."));
                             } else {
-                                this._updateMenuExpander(false, `${_('Error')}\n${this.lastUnknowErrorString}`);
+                                this._updateMenuExpander(false, _('Error') + "\n" + this.lastUnknowErrorString);
                             }
                         } else {
                             // Up to date
@@ -414,7 +422,7 @@ export default class ArchUpdateIndicatorExtension extends Extension {
 
                 _updateMenuExpander(enabled, label) {
                     this.menuExpander.menu.box.destroy_all_children();
-                    if (label == '') {
+                    if (label == "") {
                         // No text, hide the menuitem
                         this.menuExpander.actor.visible = false;
                     } else {
@@ -428,7 +436,7 @@ export default class ArchUpdateIndicatorExtension extends Extension {
                                 if (DISABLE_PARSING) {
                                     var menutext = item;
                                     if (STRIP_VERSIONS) {
-                                        var chunks = menutext.split(' ', 2);
+                                        var chunks = menutext.split(" ", 2);
                                         menutext = chunks[0];
                                     }
                                     this.menuExpander.menu.box.add(this._createPackageLabel(menutext));
@@ -438,21 +446,21 @@ export default class ArchUpdateIndicatorExtension extends Extension {
                                         // Not an update
                                         this.menuExpander.menu.box.add(new St.Label({
                                             text: item,
-                                            style_class: 'arch-updates-update-title',
+                                            style_class: 'arch-updates-update-title'
                                         }));
                                     } else {
                                         let hBox = new St.BoxLayout({vertical: false});
                                         hBox.add_child(this._createPackageLabel(matches[1]));
                                         if (!STRIP_VERSIONS) {
                                             hBox.add_child(new St.Label({
-                                                text: `${matches[2]} → `,
+                                                text: matches[2] + " → ",
                                                 y_expand: true,
                                                 y_align: Clutter.ActorAlign.CENTER,
-                                                style_class: 'arch-updates-update-version-from',
+                                                style_class: 'arch-updates-update-version-from'
                                             }));
                                             hBox.add_child(new St.Label({
                                                 text: matches[3],
-                                                style_class: 'arch-updates-update-version-to',
+                                                style_class: 'arch-updates-update-version-to'
                                             }));
                                         }
                                         this.menuExpander.menu.box.add_child(hBox);
@@ -465,7 +473,6 @@ export default class ArchUpdateIndicatorExtension extends Extension {
                     this.updateNowMenuItem.actor.reactive = enabled;
                 }
 
-                /*
                 _createPackageLabel(name) {
                     if (PACKAGE_INFO_CMD) {
                         let label = new St.Label({
@@ -485,14 +492,14 @@ export default class ArchUpdateIndicatorExtension extends Extension {
                             style_class: 'arch-updates-update-name'
                         });
                     }
-                }*/
+                }
 
                 _packageInfo(item) {
                     let proc = launcher.spawnv(['pacman', '-Si', item]);
                     proc.communicate_utf8_async(null, null, (proc, res) => {
-                        let repo = 'REPO';
-                        let arch = 'ARCH';
-                        let [, stdout] = proc.communicate_utf8_finish(res);
+                        let repo = "REPO";
+                        let arch = "ARCH";
+                        let [, stdout,] = proc.communicate_utf8_finish(res);
                         if (proc.get_successful()) {
                             let m = stdout.match(/^Repository\s+:\s+(\w+).*?^Architecture\s+:\s+(\w+)/ms);
                             if (m !== null) {
@@ -515,18 +522,18 @@ export default class ArchUpdateIndicatorExtension extends Extension {
                     try {
                         // Parse check command line
                         let [parseok, argvp] = GLib.shell_parse_argv(CHECK_CMD);
-                        if (!parseok)
-                            throw 'Parse error';
-
-
+                        if (!parseok) {
+                            throw 'Parse error'
+                        }
+                        ;
                         let [res, pid, in_fd, out_fd, err_fd] = GLib.spawn_async_with_pipes(null, argvp, null, GLib.SpawnFlags.DO_NOT_REAP_CHILD, null);
                         // Let's buffer the command's output - that's a input for us !
                         this._updateProcess_stream = new Gio.DataInputStream({
-                            base_stream: new Gio.UnixInputStream({fd: out_fd}),
+                            base_stream: new Gio.UnixInputStream({fd: out_fd})
                         });
                         // We will process the output at once when it's done
                         this._updateProcess_sourceId = GLib.child_watch_add(0, pid, () => {
-                            this._checkUpdatesRead();
+                            this._checkUpdatesRead()
                         });
                         this._updateProcess_pid = pid;
                     } catch (err) {
@@ -537,11 +544,11 @@ export default class ArchUpdateIndicatorExtension extends Extension {
                 }
 
                 _cancelCheck() {
-                    if (this._updateProcess_pid == null)
+                    if (this._updateProcess_pid == null) {
                         return;
-
-
-                    Util.spawnCommandLine(`kill ${this._updateProcess_pid}`);
+                    }
+                    ;
+                    Util.spawnCommandLine("kill " + this._updateProcess_pid);
                     this._updateProcess_pid = null; // Prevent double kill
                     this._checkUpdatesEnd();
                 }
@@ -552,8 +559,7 @@ export default class ArchUpdateIndicatorExtension extends Extension {
                     let out, size;
                     do {
                         [out, size] = this._updateProcess_stream.read_line_utf8(null);
-                        if (out)
-                            updateList.push(out);
+                        if (out) updateList.push(out);
                     } while (out);
                     this._updateList = updateList;
                     this._checkUpdatesEnd();
@@ -572,7 +578,7 @@ export default class ArchUpdateIndicatorExtension extends Extension {
                         this._updateStatus(this._updateList.length);
                     } else {
                         this._updateStatus(this._updateList.filter(function (line) {
-                            return RE_UpdateLine.test(line);
+                            return RE_UpdateLine.test(line)
                         }).length);
                     }
                 }
@@ -582,8 +588,8 @@ export default class ArchUpdateIndicatorExtension extends Extension {
                         // We have to prepare this only once
                         this._notifSource = new MessageTray.SystemNotificationSource();
                         this._notifSource.createIcon = function () {
-                            let gicon = Gio.icon_new_for_string(`${archUpdateIndicatorExtension.dir.get_child('icons').get_path()}/arch-updates-logo.svg`);
-                            return new St.Icon({gicon});
+                            let gicon = Gio.icon_new_for_string(this.dir.get_child('icons').get_path() + "/arch-updates-logo.svg");
+                            return new St.Icon({gicon: gicon});
                         };
                         // Take care of note leaving unneeded sources
                         this._notifSource.connect('destroy', () => {
@@ -606,25 +612,18 @@ export default class ArchUpdateIndicatorExtension extends Extension {
                     notification.setTransient(TRANSIENT);
                     this._notifSource.showNotification(notification);
                 }
+
             });
+
     }
 
-    init() {
-        String.prototype.format = String.prototype.f = function () {
-            var s = this, i = arguments.length;
-            while (i--)
-                s = s.replace(new RegExp(`\\{${i}\\}`, 'gm'), arguments[i]);
-            return s;/* www .  j  a va 2 s . c  o m*/
-        };
-    }
+        enable() {
+            Main.panel.addToStatusArea('ArchUpdateIndicator', new this.ArchUpdateIndicator());
+            this.ArchUpdateIndicator._positionChanged();
+        }
 
-    enable() {
-        Main.panel.addToStatusArea('ArchUpdateIndicator', new this.ArchUpdateIndicator());
-        this.ArchUpdateIndicator._positionChanged();
+        disable() {
+            this.ArchUpdateIndicator.destroy();
+            this.ArchUpdateIndicator = null;
+        }
     }
-
-    disable() {
-        this.ArchUpdateIndicator.destroy();
-        this.ArchUpdateIndicator = null;
-    }
-}
